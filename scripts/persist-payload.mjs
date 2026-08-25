@@ -10,13 +10,21 @@ const diagnosticPath = path.join(dist, '__ox/diagnostic.json');
 if (!fs.existsSync(metaPath) || fs.existsSync(diagnosticPath)) process.exit(0);
 
 const files = ['package.json', 'index.html', 'src/main.js', 'src/physics.js', 'src/mobile-controls.js'];
-const source = Object.fromEntries(files.map(file => [file, fs.readFileSync(path.join(root, file), 'utf8')]));
-const reviewPath = path.join(dist, '__ox/review-reviewer.txt');
-const review = fs.existsSync(reviewPath) ? fs.readFileSync(reviewPath, 'utf8') : '';
-const meta = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
-const bundle = JSON.stringify({ version: 1, source_commit: process.env.COMMIT_REF || '', files: source, reviewer: review, meta });
+const framed = [];
+for (const file of files) {
+  const bytes = fs.readFileSync(path.join(root, file));
+  const length = Buffer.allocUnsafe(4);
+  length.writeUInt32BE(bytes.length, 0);
+  framed.push(length, bytes);
+}
+const bundle = Buffer.concat(framed);
 const sha256 = crypto.createHash('sha256').update(bundle).digest('hex');
-const compressed = zlib.gzipSync(Buffer.from(bundle, 'utf8'), { level: 9 });
+const compressed = zlib.brotliCompressSync(bundle, {
+  params: {
+    [zlib.constants.BROTLI_PARAM_QUALITY]: 11,
+    [zlib.constants.BROTLI_PARAM_MODE]: zlib.constants.BROTLI_MODE_TEXT,
+  },
+});
 const payload = compressed.toString('base64url');
 const chunkSize = 1500;
 const segmentSize = 150;
@@ -24,8 +32,9 @@ const chunks = [];
 for (let offset = 0; offset < payload.length; offset += chunkSize) chunks.push(payload.slice(offset, offset + chunkSize));
 
 const persistRoot = path.join(dist, '__persist');
+fs.rmSync(persistRoot, { recursive: true, force: true });
 fs.mkdirSync(persistRoot, { recursive: true });
-const manifestName = `manifest-v1-${chunks.length}-${sha256}-${Buffer.byteLength(bundle)}-${compressed.length}.html`;
+const manifestName = `manifest-v2-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
 fs.writeFileSync(path.join(persistRoot, manifestName), '<!doctype html><meta charset="utf-8"><title>Ox persistence manifest</title>');
 
 chunks.forEach((chunk, index) => {
@@ -36,4 +45,4 @@ chunks.forEach((chunk, index) => {
   fs.writeFileSync(path.join(dir, 'payload.html'), '<!doctype html><meta charset="utf-8"><title>Ox persistence chunk</title>');
 });
 
-console.log(`OX PERSISTENCE PAYLOAD: chunks=${chunks.length} sha256=${sha256} jsonBytes=${Buffer.byteLength(bundle)} gzipBytes=${compressed.length}`);
+console.log(`OX PERSISTENCE PAYLOAD V2: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
