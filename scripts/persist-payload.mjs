@@ -26,23 +26,17 @@ const compressed = zlib.brotliCompressSync(bundle, {
   },
 });
 const payload = compressed.toString('base64url');
-const chunkSize = 1500;
-const segmentSize = 150;
+const chunkSize = 230;
 const chunks = [];
 for (let offset = 0; offset < payload.length; offset += chunkSize) chunks.push(payload.slice(offset, offset + chunkSize));
 
-const persistRoot = path.join(dist, '__persist');
-fs.rmSync(persistRoot, { recursive: true, force: true });
-fs.mkdirSync(persistRoot, { recursive: true });
-const manifestName = `manifest-v2-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
-fs.writeFileSync(path.join(persistRoot, manifestName), '<!doctype html><meta charset="utf-8"><title>Ox persistence manifest</title>');
-
+for (const entry of fs.readdirSync(dist)) {
+  if (/^p3-(?:manifest|\d{3})-/.test(entry)) fs.rmSync(path.join(dist, entry), { force: true });
+}
+const manifest = `p3-manifest-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
+fs.writeFileSync(path.join(dist, manifest), '<!doctype html><meta charset="utf-8"><title>Ox persistence v3</title>');
 chunks.forEach((chunk, index) => {
-  const parts = [];
-  for (let offset = 0; offset < chunk.length; offset += segmentSize) parts.push(chunk.slice(offset, offset + segmentSize));
-  const dir = path.join(persistRoot, `chunk-${String(index).padStart(3, '0')}`, ...parts);
-  fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'payload.html'), '<!doctype html><meta charset="utf-8"><title>Ox persistence chunk</title>');
+  const name = `p3-${String(index).padStart(3, '0')}-${chunk}.html`;
+  fs.writeFileSync(path.join(dist, name), '<!doctype html><meta charset="utf-8"><title>Ox persistence chunk</title>');
 });
-
-console.log(`OX PERSISTENCE PAYLOAD V2: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
+console.log(`OX PERSISTENCE V3: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
