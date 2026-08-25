@@ -33,11 +33,11 @@ const segmentSize = 180;
 
 chunks.forEach((chunk, index) => {
   const idx = String(index).padStart(3, '0');
-  const meta = index === 0 ? `p6-${idx}-${sha256}-${bundle.length}-${compressed.length}` : `p6-${idx}`;
+  const meta = index === 0 ? `p8-${idx}-${sha256}-${bundle.length}-${compressed.length}` : `p8-${idx}`;
   const segments = [];
   for (let offset = 0; offset < chunk.length; offset += segmentSize) segments.push(chunk.slice(offset, offset + segmentSize));
   const dir = path.join(dist, meta, ...segments);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'payload.html'), `<!doctype html><meta charset="utf-8"><title>Ox persistence v6 ${idx}</title><p>${idx}</p>`);
+  fs.writeFileSync(path.join(dir, 'index.html'), `<!doctype html><meta charset="utf-8"><title>Ox persistence v8 ${idx}</title><p>${idx}</p>`);
 });
-console.log(`OX PERSISTENCE V6: chunks=${chunkCount} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
+console.log(`OX PERSISTENCE V8: chunks=${chunkCount} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
