@@ -1,8 +1,8 @@
 {
   "id": "threejs-world",
-  "enabled": true,
+  "enabled": false,
   "mode": "full-files",
-  "task": "Build the entire demo in the three supplied placeholder files. Create a clean, self-contained Three.js + Vite browser scene with a large flat ground plane and a basic procedural car made only from Three.js primitive geometry (no external models, textures, images, or assets). Make the car clearly read as a car: body, cabin, four wheels, sensible proportions. Make it drivable with WASD and arrow keys using simple arcade-style acceleration, braking/reverse, steering, damping, and visible wheel rotation; add a smooth third-person chase camera. Add restrained lighting, shadows, sky/background and subtle ground/grid cues so motion and scale are readable while the world remains fundamentally a flat plane. Keep the implementation compact, performant, responsive, and usable on desktop. IMPORTANT MANIFEST CONTRACT: package.json must be syntactically valid strict JSON, with double-quoted property names and string values, no comments, no trailing commas, and no JavaScript syntax. It must define exactly dependencies.three = \"0.185.1\" and devDependencies.vite = \"8.2.2\". scripts.build must be exactly \"vite build\"; scripts.dev may be exactly \"vite\"; scripts.preview may be exactly \"vite preview\"; define no other scripts or dependencies. index.html must be the full page entry point. src/main.js must contain the complete Three.js implementation. Do not add or reference any other project files. Follow the system-provided full-file block protocol exactly and return the complete final contents of all three files; do not return a diff, prose, or Markdown fences.",
+  "task": "Archived harness-validation job. This job is intentionally disabled; the active experiment is .ox/jobs/mobile-physics-controls.json.",
   "files": [
     "package.json",
     "index.html",
@@ -11,5 +11,5 @@
   "model": "stealth/ox-alpha",
   "reasoning_effort": "medium",
   "max_tokens": 16000,
-  "trigger": "full-file-protocol-2026-08-25T02:26-04:00"
+  "trigger": "archived-after-pr1-harness-test-2026-08-25"
 }

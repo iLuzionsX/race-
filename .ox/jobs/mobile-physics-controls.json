@@ -1,0 +1,42 @@
+{
+  "id": "mobile-physics-controls",
+  "enabled": true,
+  "model": "stealth/ox-alpha",
+  "reasoning_effort": "medium",
+  "max_tokens": 16000,
+  "agents": [
+    {
+      "id": "physics",
+      "mode": "files",
+      "files": ["src/physics.js"],
+      "context_files": ["src/physics.js"],
+      "reasoning_effort": "high",
+      "task": "Author only src/physics.js. Implement a compact but convincing mobile-friendly arcade vehicle dynamics module with no DOM and no Three.js dependency. Export createVehiclePhysics(options = {}) returning an object with state, step(dt, input), reset(), and configurable parameters. State must expose x, z, heading, speed, yawRate, steering, longitudinalVelocity and lateralVelocity (or equivalently clear names). step must accept normalized input { throttle, brake, steer, handbrake, reset } where throttle/brake are 0..1 and steer is -1..1. Use a stable fixed/variable-dt-safe kinematic/dynamic hybrid: engine acceleration, braking, reverse transition, drag/rolling resistance, speed-sensitive steering, steering smoothing, lateral grip/slip damping, yaw response, handbrake-induced rear grip reduction, sane max forward/reverse speeds, and no NaN/explosive behavior when dt spikes. Clamp dt internally. Keep units consistent enough for a Three.js scene where 1 unit is about 1 meter. Provide deterministic reset to origin. No external libraries, URLs, assets, globals, or side effects. This module will be consumed by another agent, so keep the exported interface obvious and documented with concise comments. Return the complete file via the required file-block protocol."
+    },
+    {
+      "id": "controls",
+      "mode": "files",
+      "files": ["src/mobile-controls.js"],
+      "context_files": ["src/mobile-controls.js"],
+      "reasoning_effort": "medium",
+      "task": "Author only src/mobile-controls.js. Implement a production-minded mobile driving input layer using Pointer Events and DOM primitives only. Export createMobileControls(options = {}) returning an object with getInput(), destroy(), and optionally useful DOM handles. It must support simultaneous multi-touch: a large left steering region/pad that tracks horizontal displacement continuously and springs toward center on release, plus distinct right-side throttle and brake pedals that can be held independently while steering. Include pointer capture/cancel handling so controls do not stick, touch-action prevention, safe-area-aware placement, orientation/resize resilience, and visual pressed/steering feedback. Include desktop keyboard fallback (W/ArrowUp throttle, S/ArrowDown brake/reverse intent, A/D or arrows steering, Space handbrake, R reset) through the same normalized input shape { throttle, brake, steer, handbrake, reset }. Avoid page scrolling/selection while interacting with controls but do not globally sabotage unrelated browser behavior more than necessary. Keep all styles self-contained in the module and ensure destroy removes listeners/elements/style. No external libraries, URLs, assets, or frameworks. Return the complete file via the required file-block protocol."
+    },
+    {
+      "id": "integrator",
+      "mode": "files",
+      "files": ["package.json", "index.html", "src/main.js"],
+      "context_files": ["package.json", "index.html", "src/main.js", "src/physics.js", "src/mobile-controls.js"],
+      "reasoning_effort": "medium",
+      "task": "Integrate the independently authored physics and mobile-controls modules into a complete Three.js + Vite mobile-first car demo by authoring only package.json, index.html, and src/main.js. package.json must be strict JSON with exactly dependencies.three = \"0.185.1\" and devDependencies.vite = \"8.2.2\"; scripts.build exactly \"vite build\", optional dev exactly \"vite\", optional preview exactly \"vite preview\", no other scripts/dependencies. index.html must provide a full-screen, mobile-safe viewport with sensible metadata and no external resources. src/main.js must import Three.js, ./physics.js and ./mobile-controls.js and use their exported interfaces instead of duplicating those responsibilities. Build a clean flat driving world, procedural readable car with body/cabin/four wheels, shadows/lighting/grid or lane cues, speed HUD, resize/orientation handling, and a smooth chase camera. Run physics with a stable accumulator/fixed-step or otherwise bounded stepping and interpolate/render cleanly. Visually steer front wheels and rotate all wheels based on motion. Mobile controls must be usable with two thumbs without canvas gestures fighting the UI. Keep desktop fallback working through the controls module. Avoid external assets and URLs. Focus on responsive feel and correctness rather than decorative complexity. Return complete contents of exactly the three allowed files via the required file-block protocol."
+    },
+    {
+      "id": "reviewer",
+      "mode": "review",
+      "files": [],
+      "context_files": ["package.json", "index.html", "src/main.js", "src/physics.js", "src/mobile-controls.js"],
+      "reasoning_effort": "high",
+      "task": "Audit the complete generated mobile car demo as an independent senior gameplay/controls reviewer. Look specifically for: build/runtime integration mistakes; mismatch between module exports/imports; unstable vehicle math or dt behavior; steering/brake/reverse logic that would feel broken; inability to steer and throttle/brake simultaneously on a phone; stuck pointer states; controls obscured by safe areas or unusable in portrait/landscape; browser scroll/zoom interference; camera behavior that fights driving; missing resize handling; and obvious performance problems. Treat the Vite build as already successful but do not assume runtime behavior is correct. Return PASS only if there is no blocker likely to prevent the requested mobile physics/control test from being meaningfully usable. Use the exact review-block protocol and keep findings concise."
+    }
+  ],
+  "trigger": "fanout-mobile-physics-controls-v1-2026-08-25T02:50-04:00"
+}
