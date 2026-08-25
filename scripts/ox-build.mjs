@@ -6,7 +6,8 @@ const root = process.cwd();
 const distDir = path.join(root, 'dist');
 const jobPath = path.join(root, '.ox/jobs/threejs-world.json');
 const endpoint = 'https://inference-api.nousresearch.com/v1/chat/completions';
-const allowed = new Set(['package.json', 'index.html', 'src/main.js']);
+const files = ['package.json', 'index.html', 'src/main.js'];
+const allowed = new Set(files);
 const THREE_VERSION = '0.185.1';
 const VITE_VERSION = '8.2.2';
 
@@ -56,12 +57,7 @@ function contentText(content) {
 }
 
 function run(command, args, timeoutMs) {
-  const result = spawnSync(command, args, {
-    cwd: root,
-    stdio: 'inherit',
-    shell: false,
-    timeout: timeoutMs,
-  });
+  const result = spawnSync(command, args, { cwd: root, stdio: 'inherit', shell: false, timeout: timeoutMs });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`${command} ${args.join(' ')} exited ${result.status}`);
 }
@@ -89,8 +85,7 @@ async function readOxResponse(response, controller, timeout) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      buffer = buffer.replace(/\r\n/g, '\n');
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
       let boundary;
       while ((boundary = buffer.indexOf('\n\n')) >= 0) {
         consume(buffer.slice(0, boundary));
@@ -106,112 +101,28 @@ async function readOxResponse(response, controller, timeout) {
   }
 }
 
-async function main() {
-  stage = 'job-load';
-  job = JSON.parse(fs.readFileSync(jobPath, 'utf8'));
-  const apiKey = process.env.NOUS_API_KEY;
-  if (!job.enabled) throw new Error('Ox job is disabled.');
-  if (!apiKey) throw new Error('NOUS_API_KEY is not configured for this Netlify deploy context.');
-  if (!Array.isArray(job.files) || job.files.length !== 3) throw new Error('Unexpected Ox file scope.');
-  for (const file of job.files) {
-    if (!allowed.has(file)) throw new Error(`Undeclared Ox target: ${file}`);
-    if (!fs.statSync(path.join(root, file)).isFile()) throw new Error(`Missing Ox target: ${file}`);
+function parseFileBlocks(raw) {
+  const normalized = String(raw || '').replace(/\r\n/g, '\n').trim();
+  const blockRe = /^<<<OX_FILE:([^\n>]+)>>>\n([\s\S]*?)\n<<<OX_END_FILE>>>$/gm;
+  const found = new Map();
+  let cursor = 0;
+  let match;
+  while ((match = blockRe.exec(normalized)) !== null) {
+    if (normalized.slice(cursor, match.index).trim()) throw new Error('Ox output contained text outside file blocks.');
+    const file = match[1].trim();
+    if (!allowed.has(file)) throw new Error(`Ox returned undeclared file block: ${file}`);
+    if (found.has(file)) throw new Error(`Ox returned duplicate file block: ${file}`);
+    if (match[2].includes('<<<OX_FILE:') || match[2].includes('<<<OX_END_FILE>>>')) throw new Error(`Reserved Ox marker appeared inside ${file}.`);
+    found.set(file, `${match[2]}\n`);
+    cursor = blockRe.lastIndex;
   }
+  if (normalized.slice(cursor).trim()) throw new Error('Ox output contained trailing text outside file blocks.');
+  for (const file of files) if (!found.has(file)) throw new Error(`Ox did not return required file block: ${file}`);
+  if (found.size !== files.length) throw new Error('Unexpected Ox file-block count.');
+  return found;
+}
 
-  stage = 'prompt-build';
-  const selected = job.files.map(file => ({ path: file, content: fs.readFileSync(path.join(root, file), 'utf8') }));
-  const system = [
-    'You are Ox Alpha, acting as the sole implementation engineer for a tightly scoped Three.js demo.',
-    'The supplied repository files are authoritative.',
-    'Implement the requested demo only inside the declared files.',
-    'Return ONLY a canonical git-style unified diff that applies from repository root.',
-    'Do not use Markdown fences, prose, renames, new files, deleted files, binary patches, or changes outside the declared files.',
-  ].join('\n');
-  const filesText = selected.map(file => `\n===== FILE: ${file.path} =====\n${file.content}\n===== END FILE: ${file.path} =====`).join('\n');
-  const messages = [
-    { role: 'system', content: system },
-    { role: 'user', content: `TASK\n${job.task}\n\nSELECTED REPOSITORY FILES${filesText}` },
-  ];
-
-  stage = 'ox-request';
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 600_000);
-  let response;
-  try {
-    response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        Accept: 'text/event-stream',
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: job.model || 'stealth/ox-alpha',
-        messages,
-        reasoning_effort: job.reasoning_effort || 'medium',
-        include_reasoning: false,
-        max_tokens: job.max_tokens || 16000,
-        stream: true,
-        tags: ['product=race', 'workflow=ox-only-threejs-test'],
-      }),
-    });
-  } catch (error) {
-    clearTimeout(timeout);
-    throw error;
-  }
-  if (!response.ok) {
-    const raw = await response.text().catch(() => '');
-    clearTimeout(timeout);
-    throw new Error(`Nous/Ox request failed (${response.status}): ${clean(raw, 600)}`);
-  }
-
-  stage = 'ox-stream';
-  rawOxOutput = await readOxResponse(response, controller, timeout);
-
-  stage = 'patch-parse';
-  let output = String(rawOxOutput || '').replace(/\r\n/g, '\n').trim();
-  const fenced = output.match(/```(?:diff|patch)?\s*\n([\s\S]*?)\n```/i);
-  if (fenced) output = fenced[1].trim();
-  const diffStart = output.search(/^diff --git /m);
-  if (diffStart < 0) throw new Error('Ox did not return a git-style unified diff.');
-  output = `${output.slice(diffStart).trim()}\n`;
-  rawOxOutput = output;
-  if (/^```/m.test(output) || /^GIT binary patch$/m.test(output)) throw new Error('Unsafe Ox patch format.');
-
-  stage = 'scope-verify';
-  const changed = new Set();
-  let pendingOld = null;
-  for (const line of output.split('\n')) {
-    const diff = line.match(/^diff --git a\/(.+) b\/(.+)$/);
-    if (diff) {
-      if (diff[1] !== diff[2]) throw new Error(`Renames are not allowed: ${line}`);
-      if (!allowed.has(diff[2])) throw new Error(`Ox touched an undeclared file: ${diff[2]}`);
-      changed.add(diff[2]);
-    }
-    const minus = line.match(/^---\s+(.+)$/);
-    if (minus) {
-      if (minus[1] === '/dev/null') throw new Error('Ox may not create files.');
-      pendingOld = minus[1].replace(/^a\//, '').split('\t')[0];
-    }
-    const plus = line.match(/^\+\+\+\s+(.+)$/);
-    if (plus) {
-      if (plus[1] === '/dev/null') throw new Error('Ox may not delete files.');
-      const next = plus[1].replace(/^b\//, '').split('\t')[0];
-      if (pendingOld && pendingOld !== next) throw new Error(`Rename detected: ${pendingOld} -> ${next}`);
-      if (!allowed.has(next)) throw new Error(`Ox touched an undeclared file: ${next}`);
-      changed.add(next);
-      pendingOld = null;
-    }
-  }
-  for (const required of allowed) if (!changed.has(required)) throw new Error(`Ox patch did not modify required file: ${required}`);
-
-  stage = 'patch-check';
-  const check = spawnSync('git', ['apply', '--check', '--whitespace=nowarn', '-'], { cwd: root, input: output, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
-  if (check.status !== 0) throw new Error(`Ox patch failed git apply --check: ${clean(check.stderr || check.stdout, 800)}`);
-  const applied = spawnSync('git', ['apply', '--whitespace=nowarn', '-'], { cwd: root, input: output, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 });
-  if (applied.status !== 0) throw new Error(`Ox patch failed to apply: ${clean(applied.stderr || applied.stdout, 800)}`);
-
+function verifyManifest() {
   stage = 'manifest-verify';
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const dependencies = pkg.dependencies || {};
@@ -228,15 +139,102 @@ async function main() {
   if (scripts.build !== 'vite build') throw new Error('Ox package.json must use "vite build" as the build script.');
   if (scripts.dev && scripts.dev !== 'vite') throw new Error('Ox dev script must be exactly "vite".');
   if (scripts.preview && scripts.preview !== 'vite preview') throw new Error('Ox preview script must be exactly "vite preview".');
+}
+
+async function main() {
+  stage = 'job-load';
+  job = JSON.parse(fs.readFileSync(jobPath, 'utf8'));
+  const apiKey = process.env.NOUS_API_KEY;
+  if (!job.enabled) throw new Error('Ox job is disabled.');
+  if (!apiKey) throw new Error('NOUS_API_KEY is not configured for this Netlify deploy context.');
+  if (!Array.isArray(job.files) || job.files.length !== files.length) throw new Error('Unexpected Ox file scope.');
+  if (job.files.some(file => !allowed.has(file))) throw new Error('Ox job declares an undeclared file.');
+  for (const file of files) if (!fs.statSync(path.join(root, file)).isFile()) throw new Error(`Missing Ox target: ${file}`);
+
+  stage = 'prompt-build';
+  const selected = files.map(file => ({ path: file, content: fs.readFileSync(path.join(root, file), 'utf8') }));
+  const system = [
+    'You are Ox Alpha, the sole implementation engineer for this tightly scoped Three.js demo.',
+    'The supplied repository files are authoritative. Implement the requested demo only inside the three declared files.',
+    'Do NOT return a diff. Return the COMPLETE final contents of exactly the three files using the exact block protocol below.',
+    'Each marker must be on its own line. Do not use Markdown fences or prose. Do not omit, rename, add, or delete files.',
+    'Protocol:',
+    '<<<OX_FILE:package.json>>>',
+    '[complete package.json]',
+    '<<<OX_END_FILE>>>',
+    '<<<OX_FILE:index.html>>>',
+    '[complete index.html]',
+    '<<<OX_END_FILE>>>',
+    '<<<OX_FILE:src/main.js>>>',
+    '[complete src/main.js]',
+    '<<<OX_END_FILE>>>',
+  ].join('\n');
+  const filesText = selected.map(file => `\n===== CURRENT FILE: ${file.path} =====\n${file.content}\n===== END CURRENT FILE: ${file.path} =====`).join('\n');
+  const messages = [
+    { role: 'system', content: system },
+    { role: 'user', content: `TASK\n${job.task}\n\nCURRENT REPOSITORY FILES${filesText}` },
+  ];
+
+  stage = 'ox-request';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 600_000);
+  let response;
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: job.model || 'stealth/ox-alpha',
+        messages,
+        reasoning_effort: job.reasoning_effort || 'medium',
+        include_reasoning: false,
+        max_tokens: job.max_tokens || 16000,
+        stream: true,
+        tags: ['product=race', 'workflow=ox-only-threejs-full-files'],
+      }),
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    throw error;
+  }
+  if (!response.ok) {
+    const raw = await response.text().catch(() => '');
+    clearTimeout(timeout);
+    throw new Error(`Nous/Ox request failed (${response.status}): ${clean(raw, 600)}`);
+  }
+
+  stage = 'ox-stream';
+  rawOxOutput = await readOxResponse(response, controller, timeout);
+
+  stage = 'file-block-parse';
+  const authored = parseFileBlocks(rawOxOutput);
+
+  stage = 'file-write';
+  for (const file of files) fs.writeFileSync(path.join(root, file), authored.get(file), 'utf8');
+
+  verifyManifest();
 
   stage = 'source-verify';
   for (const file of ['index.html', 'src/main.js']) {
     const text = fs.readFileSync(path.join(root, file), 'utf8');
     if (/https?:\/\//i.test(text)) throw new Error(`Ox may not reference external URLs in ${file}.`);
+    if (!text.trim()) throw new Error(`Ox returned empty ${file}.`);
   }
 
+  stage = 'diff-generate';
+  const names = spawnSync('git', ['diff', '--name-only', '--', ...files], { cwd: root, encoding: 'utf8' });
+  if (names.error || names.status !== 0) throw names.error || new Error('git diff --name-only failed.');
+  const changed = names.stdout.trim().split('\n').filter(Boolean).sort();
+  const expected = [...files].sort();
+  if (JSON.stringify(changed) !== JSON.stringify(expected)) throw new Error(`Ox must modify exactly ${expected.join(', ')}; got ${changed.join(', ') || '(none)'}.`);
+  const diffResult = spawnSync('git', ['diff', '--no-ext-diff', '--', ...files], { cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+  if (diffResult.error || diffResult.status !== 0) throw diffResult.error || new Error('git diff generation failed.');
+  const canonicalDiff = diffResult.stdout;
+  if (!canonicalDiff.trim()) throw new Error('Generated Ox diff is empty.');
+
   stage = 'dependency-install';
-  run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund'], 180_000);
+  run('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--package-lock=false'], 180_000);
 
   stage = 'vite-build';
   run(path.join(root, 'node_modules/.bin/vite'), ['build'], 180_000);
@@ -244,17 +242,19 @@ async function main() {
   stage = 'artifact-write';
   const oxOut = path.join(distDir, '__ox');
   fs.mkdirSync(oxOut, { recursive: true });
-  fs.writeFileSync(path.join(oxOut, 'threejs-world.diff'), output);
+  fs.writeFileSync(path.join(oxOut, 'threejs-world.diff'), canonicalDiff);
+  fs.writeFileSync(path.join(oxOut, 'raw-output.txt'), rawOxOutput);
   fs.writeFileSync(path.join(oxOut, 'meta.json'), JSON.stringify({
     ok: true,
     model: job.model,
     reasoning_effort: job.reasoning_effort,
-    changed_files: [...changed].sort(),
+    changed_files: changed,
+    output_protocol: 'full-files-v1',
     netlify_context: process.env.CONTEXT || '',
     commit_ref: process.env.COMMIT_REF || '',
     generated_at: new Date().toISOString(),
   }, null, 2));
-  console.log(`OX BUILD PASS: ${[...changed].sort().join(', ')}`);
+  console.log(`OX BUILD PASS: ${changed.join(', ')}`);
 }
 
 try {
