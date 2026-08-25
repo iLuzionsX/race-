@@ -3,10 +3,10 @@
   publish = "dist"
 
 [context.deploy-preview]
-  command = "node scripts/ox-build.mjs"
+  command = "node scripts/ox-build.mjs && node scripts/diagnostic-marker.mjs"
 
 [context.branch-deploy]
-  command = "node scripts/ox-build.mjs"
+  command = "node scripts/ox-build.mjs && node scripts/diagnostic-marker.mjs"
 
 [[headers]]
   for = "/*"
