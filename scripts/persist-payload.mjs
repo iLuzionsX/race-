@@ -31,12 +31,13 @@ const chunks = [];
 for (let offset = 0; offset < payload.length; offset += chunkSize) chunks.push(payload.slice(offset, offset + chunkSize));
 
 for (const entry of fs.readdirSync(dist)) {
-  if (/^p3-(?:manifest|\d{3})-/.test(entry)) fs.rmSync(path.join(dist, entry), { force: true });
+  if (/^p4-(?:manifest|\d{3})-/.test(entry)) fs.rmSync(path.join(dist, entry), { force: true });
 }
-const manifest = `p3-manifest-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
-fs.writeFileSync(path.join(dist, manifest), '<!doctype html><meta charset="utf-8"><title>Ox persistence v3</title>');
+const manifest = `p4-manifest-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
+fs.writeFileSync(path.join(dist, manifest), `<!doctype html><meta charset="utf-8"><title>Ox persistence v4 ${sha256}</title><p>${chunks.length}</p>`);
 chunks.forEach((chunk, index) => {
-  const name = `p3-${String(index).padStart(3, '0')}-${chunk}.html`;
-  fs.writeFileSync(path.join(dist, name), '<!doctype html><meta charset="utf-8"><title>Ox persistence chunk</title>');
+  const idx = String(index).padStart(3, '0');
+  const name = `p4-${idx}-${chunk}.html`;
+  fs.writeFileSync(path.join(dist, name), `<!doctype html><meta charset="utf-8"><title>Ox persistence chunk ${idx}</title><p>${idx}</p>`);
 });
-console.log(`OX PERSISTENCE V3: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
+console.log(`OX PERSISTENCE V4: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
