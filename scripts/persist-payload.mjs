@@ -26,18 +26,18 @@ const compressed = zlib.brotliCompressSync(bundle, {
   },
 });
 const payload = compressed.toString('base64url');
-const chunkSize = 230;
-const chunks = [];
-for (let offset = 0; offset < payload.length; offset += chunkSize) chunks.push(payload.slice(offset, offset + chunkSize));
+const chunkCount = 8;
+const chunkSize = Math.ceil(payload.length / chunkCount);
+const chunks = Array.from({ length: chunkCount }, (_, index) => payload.slice(index * chunkSize, (index + 1) * chunkSize));
+const segmentSize = 180;
 
-for (const entry of fs.readdirSync(dist)) {
-  if (/^p4-(?:manifest|\d{3})-/.test(entry)) fs.rmSync(path.join(dist, entry), { force: true });
-}
-const manifest = `p4-manifest-${chunks.length}-${sha256}-${bundle.length}-${compressed.length}.html`;
-fs.writeFileSync(path.join(dist, manifest), `<!doctype html><meta charset="utf-8"><title>Ox persistence v4 ${sha256}</title><p>${chunks.length}</p>`);
 chunks.forEach((chunk, index) => {
   const idx = String(index).padStart(3, '0');
-  const name = `p4-${idx}-${chunk}.html`;
-  fs.writeFileSync(path.join(dist, name), `<!doctype html><meta charset="utf-8"><title>Ox persistence chunk ${idx}</title><p>${idx}</p>`);
+  const meta = index === 0 ? `p6-${idx}-${sha256}-${bundle.length}-${compressed.length}` : `p6-${idx}`;
+  const segments = [];
+  for (let offset = 0; offset < chunk.length; offset += segmentSize) segments.push(chunk.slice(offset, offset + segmentSize));
+  const dir = path.join(dist, meta, ...segments);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'payload.html'), `<!doctype html><meta charset="utf-8"><title>Ox persistence v6 ${idx}</title><p>${idx}</p>`);
 });
-console.log(`OX PERSISTENCE V4: chunks=${chunks.length} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
+console.log(`OX PERSISTENCE V6: chunks=${chunkCount} sha256=${sha256} rawBytes=${bundle.length} brotliBytes=${compressed.length}`);
