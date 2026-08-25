@@ -1,0 +1,14 @@
+{
+  "id": "threejs-world",
+  "enabled": true,
+  "mode": "patch",
+  "task": "Build the entire demo in the three supplied placeholder files. Create a clean, self-contained Three.js + Vite browser scene with a large flat ground plane and a basic procedural car made only from Three.js primitive geometry (no external models, textures, images, or assets). Make the car clearly read as a car: body, cabin, four wheels, sensible proportions. Make it drivable with WASD and arrow keys using simple arcade-style acceleration, braking/reverse, steering, damping, and wheel rotation; add a smooth third-person chase camera. Add restrained lighting, shadows, sky/background and subtle ground/grid cues so motion and scale are readable while the world remains fundamentally a flat plane. Keep the implementation compact, performant, responsive, and usable on desktop. package.json must define the needed dependencies and Vite scripts. index.html must be the full page entry point. src/main.js must contain the Three.js implementation. Do not add or reference any other project files. OUTPUT CONTRACT: return only one canonical git-style unified diff modifying exactly package.json, index.html, and src/main.js. No Markdown fences, prose, commentary, renames, new files, or deleted files.",
+  "files": [
+    "package.json",
+    "index.html",
+    "src/main.js"
+  ],
+  "model": "stealth/ox-alpha",
+  "reasoning_effort": "medium",
+  "max_tokens": 16000
+}
