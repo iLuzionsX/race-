@@ -11,5 +11,5 @@
   "model": "stealth/ox-alpha",
   "reasoning_effort": "medium",
   "max_tokens": 16000,
-  "trigger": "hardened-retry-2026-08-25T01:56-04:00"
+  "trigger": "retry-after-ox-429-2026-08-25T02:01-04:00"
 }
