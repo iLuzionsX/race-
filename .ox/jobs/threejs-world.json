@@ -10,5 +10,6 @@
   ],
   "model": "stealth/ox-alpha",
   "reasoning_effort": "medium",
-  "max_tokens": 16000
+  "max_tokens": 16000,
+  "trigger": "netlify-connected-2026-08-25T01:52-04:00"
 }
