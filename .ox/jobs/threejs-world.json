@@ -1,0 +1,15 @@
+{
+  "id": "threejs-world",
+  "enabled": false,
+  "mode": "full-files",
+  "task": "Archived harness-validation job. This job is intentionally disabled; the active experiment is .ox/jobs/mobile-physics-controls.json.",
+  "files": [
+    "package.json",
+    "index.html",
+    "src/main.js"
+  ],
+  "model": "stealth/ox-alpha",
+  "reasoning_effort": "medium",
+  "max_tokens": 16000,
+  "trigger": "archived-after-pr1-harness-test-2026-08-25"
+}
